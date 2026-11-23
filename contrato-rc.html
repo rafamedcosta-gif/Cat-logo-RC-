@@ -19,9 +19,16 @@
 .sign-controls label.approve{align-items:flex-start}.sign-controls .approve input{margin-top:.35em}
 @media(max-width:480px){.contract-brand{gap:.65rem;padding:.65rem}.contract-brand img{width:60px}}
 @media print{.sheet{background:white;print-color-adjust:exact;-webkit-print-color-adjust:exact}.contract-brand,.plan-box,.signature-record{break-inside:avoid}.sign-controls,.interactive-only{display:none!important}}
+@media print{.for-online-signing .signature-record{display:none!important}}
 </style>
 <main>
   <header><p class="muted">RC · Raquel Casarini Estética Regenerativa</p><h1>Pedidos e contratos</h1><p class="muted">Prévia local. Use dados fictícios para testar.</p></header>
+  <form id="unlock" hidden>
+    <h1>Seu contrato RC</h1>
+    <label>Código de acesso enviado pela Raquel <input id="access-code" required spellcheck="false" autocomplete="off"></label>
+    <button>Abrir contrato</button>
+    <p id="unlock-status" class="error" role="alert"></p>
+  </form>
   <form id="import">
     <label for="order">Cole o código completo ou a mensagem do WhatsApp</label>
     <textarea id="order" required rows="3" spellcheck="false"></textarea>
@@ -95,11 +102,20 @@
       <p id="photo-result"></p>
     </section>
     <p class="muted private-note" id="clinical-reference"></p>
+    <p id="return-instructions" hidden>Após assinar, salve o PDF, guarde uma cópia e envie outra à Raquel pelo WhatsApp.</p>
     <div class="signature-actions interactive-only">
       <button type="button" id="print">Imprimir ou salvar PDF</button>
+      <button type="button" id="make-client-link">Gerar link para a cliente</button>
       <button type="button" id="export-signing">Baixar cópia para assinatura</button>
+      <button type="button" id="print-for-signing">Salvar PDF para assinatura online</button>
       <button type="button" id="finish-contract">Encerrar e limpar</button>
     </div>
+    <div id="share-contract" class="interactive-only" hidden>
+      <label>Link para enviar pelo WhatsApp <input id="client-link" readonly></label>
+      <label>Código de acesso <input id="client-code" readonly></label>
+      <p class="muted">Copie o link e envie o código em uma mensagem separada. Confira o contato antes de enviar.</p>
+    </div>
+    <p class="error interactive-only" id="link-status" role="alert"></p>
   </section>
 </main>
 <script>
@@ -287,6 +303,7 @@ byId('import').addEventListener('submit', event => {
   byId('approval').reset();
   byId('approval-error').textContent = '';
   byId('document').hidden = true;
+  clearClientLink();
   byId('reference').textContent = 'Pedido ' + order.reference;
   byId('lines').innerHTML = order.lines.map((item, i) => `
     <div class="line">
@@ -329,7 +346,7 @@ byId('approval').addEventListener('submit', event => {
     return;
   }
   const providerId = byId('provider-id').value.trim();
-  byId('provider').textContent = 'Prestadora: RC Estética Regenerativa · Raquel Casarini · CRBM 26.358' + (providerId ? ' · CPF/CNPJ: ' + providerId : '');
+  byId('provider').textContent = 'Prestadora: RC Estética Regenerativa · Raquel Mendes Rodrigues Costa Casarini · CRBM-26358' + (providerId ? ' · CPF/CNPJ: ' + providerId : '');
   byId('clinical-summary').textContent = 'Orientações do plano: ' + clinicalNotes;
   byId('customer').textContent = 'Cliente: ' + client + ' · Pedido ' + order.reference;
   byId('terms').textContent = 'Pagamento combinado: ' + payment;
@@ -342,10 +359,11 @@ byId('approval').addEventListener('submit', event => {
   }));
   byId('total').textContent = 'Valor total: ' + money(approved.reduce((sum,item) => sum + item.cents,0));
   resetSignature();
+  clearClientLink();
   output.hidden = false;
   output.scrollIntoView({behavior:'smooth'});
 });
-byId('approval').addEventListener('input', () => { byId('document').hidden = true; });
+byId('approval').addEventListener('input', () => { byId('document').hidden = true; clearClientLink(); });
 function setupSignature(root) {
   const get = id => root.querySelector('#' + id);
   const form = get('sign-form');
@@ -419,9 +437,26 @@ function setupSignature(root) {
 }
 
 const resetSignature = setupSignature(byId('document'));
-byId('print').addEventListener('click', () => window.print());
+byId('print').addEventListener('click', () => {
+  if (clientMode && !byId('signature-copy').getAttribute('src')) {
+    byId('signature-error').textContent = 'Registre sua assinatura antes de salvar o PDF.';
+    byId('sign-form').scrollIntoView({behavior:'smooth'});
+    return;
+  }
+  window.print();
+});
+byId('print-for-signing').addEventListener('click', () => {
+  const contract = byId('document');
+  contract.classList.add('for-online-signing');
+  try {
+    window.print();
+  } finally {
+    contract.classList.remove('for-online-signing');
+  }
+});
 function clearContract() {
   order = undefined;
+  clearClientLink();
   byId('import').reset();
   byId('approval').reset();
   resetSignature();
@@ -436,12 +471,116 @@ byId('finish-contract').addEventListener('click', () => {
   byId('order').focus();
 });
 window.addEventListener('pageshow', event => {
-  if (event.persisted) clearContract();
+  if (event.persisted) {
+    if (location.hash.startsWith('#contrato=')) location.reload();
+    else clearContract();
+  }
 });
+const clientFields = ['provider', 'customer', 'terms', 'clinical-summary', 'total'];
+const contractContext = new TextEncoder().encode('RC contrato v1');
+const clientMode = location.hash.startsWith('#contrato=');
+const contractUrl = 'https://rafamedcosta-gif.github.io/Cat-logo-RC-/contrato-rc.html';
+
+function toUrlBytes(bytes) {
+  return btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromUrlBytes(value) {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) throw new Error('Código inválido.');
+  return Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), char => char.charCodeAt(0));
+}
+
+async function sealContract(payload) {
+  const keyBytes = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['encrypt']);
+  const content = new TextEncoder().encode(JSON.stringify(payload));
+  const locked = new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM', iv, additionalData:contractContext}, key, content));
+  const packet = new Uint8Array(iv.length + locked.length);
+  packet.set(iv);
+  packet.set(locked, iv.length);
+  return {fragment: toUrlBytes(packet), code: toUrlBytes(keyBytes)};
+}
+
+async function unsealContract(fragment, code) {
+  const packet = fromUrlBytes(fragment);
+  const keyBytes = fromUrlBytes(code.trim());
+  if (keyBytes.length !== 16 || packet.length < 29 || packet.length > 100000) throw new Error('Dados inválidos.');
+  const key = await crypto.subtle.importKey('raw', keyBytes, 'AES-GCM', false, ['decrypt']);
+  const unlocked = await crypto.subtle.decrypt({name:'AES-GCM', iv:packet.slice(0,12), additionalData:contractContext}, key, packet.slice(12));
+  const payload = JSON.parse(new TextDecoder().decode(unlocked));
+  if (!payload || !clientFields.every(id => typeof payload[id] === 'string') ||
+      !Array.isArray(payload.plan) || !payload.plan.length || !payload.plan.every(line => typeof line === 'string')) {
+    throw new Error('Contrato inválido.');
+  }
+  return payload;
+}
+
+let linkRequest = 0;
+function clearClientLink() {
+  linkRequest++;
+  byId('share-contract').hidden = true;
+  byId('client-link').value = '';
+  byId('client-code').value = '';
+  byId('link-status').textContent = '';
+}
+
+byId('make-client-link').addEventListener('click', async () => {
+  if (clientMode || byId('document').hidden) return;
+  clearClientLink();
+  const request = linkRequest;
+  const payload = Object.fromEntries(clientFields.map(id => [id, byId(id).textContent]));
+  payload.plan = Array.from(byId('plan').children, li => li.textContent);
+  try {
+    const {fragment, code} = await sealContract(payload);
+    if (request !== linkRequest) return;
+    byId('client-link').value = contractUrl + '#contrato=' + fragment;
+    byId('client-code').value = code;
+    byId('share-contract').hidden = false;
+    byId('client-link').focus();
+    byId('client-link').select();
+  } catch {
+    if (request === linkRequest) byId('link-status').textContent = 'Não foi possível proteger o link. Abra o painel no navegador pelo endereço HTTPS.';
+  }
+});
+
+if (clientMode) {
+  byId('import').hidden = true;
+  byId('unlock').hidden = false;
+  for (const id of ['make-client-link','export-signing','print-for-signing','finish-contract','share-contract','clinical-reference']) {
+    byId(id).hidden = true;
+  }
+  byId('return-instructions').hidden = false;
+  byId('unlock').addEventListener('submit', async event => {
+    event.preventDefault();
+    const status = byId('unlock-status');
+    status.textContent = '';
+    try {
+      const payload = await unsealContract(location.hash.slice('#contrato='.length), byId('access-code').value);
+      for (const id of clientFields) byId(id).textContent = payload[id];
+      byId('plan').replaceChildren(...payload.plan.map(line => {
+        const li = document.createElement('li');
+        li.textContent = line;
+        return li;
+      }));
+      byId('unlock').reset();
+      byId('unlock').hidden = true;
+      byId('document').hidden = false;
+      byId('document').scrollIntoView({behavior:'smooth'});
+    } catch {
+      status.textContent = 'Não foi possível abrir. Confira o link e o código enviados pela Raquel.';
+    }
+  });
+}
+
 byId('export-signing').addEventListener('click', () => {
   const copy = byId('document').cloneNode(true);
   copy.querySelector('.private-note').remove();
+  for (const id of ['make-client-link', 'share-contract', 'link-status']) copy.querySelector('#' + id).remove();
+  copy.querySelector('#return-instructions').hidden = false;
   copy.querySelector('#export-signing').remove();
+  copy.querySelector('#print-for-signing').remove();
   copy.querySelector('#finish-contract').remove();
   copy.querySelector('#signature-meta').textContent = '';
   copy.querySelector('#signature-copy').removeAttribute('src');
