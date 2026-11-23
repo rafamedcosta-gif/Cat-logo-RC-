@@ -4,7 +4,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pedidos | RC Estética Regenerativa</title>
 <style>
-:root{color:#302421;background:#e9d3c6;font:16px/1.5 system-ui,sans-serif}*{box-sizing:border-box}body{margin:0}main{width:min(94%,820px);margin:28px auto;padding:clamp(18px,5vw,42px);background:#f5e9e1;border:1px solid #bc9586}h1,h2,h3{font-family:Georgia,serif;font-weight:400;line-height:1.14}h1{margin:.3em 0}h2{margin-top:1em}p{margin:.55em 0}label{display:grid;gap:.25em;margin:.6em 0}input,textarea,button{font:inherit}input,textarea{min-width:0;padding:.55em;color:#302421;background:#fff9f3;border:1px solid #aa8073;border-radius:4px}textarea{width:100%}button{padding:.55em .8em;border:1px solid #754535;border-radius:4px;background:#754535;color:white;cursor:pointer}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #754535;outline-offset:2px}.muted{color:#65483f;font-size:.9rem}.line{border-top:1px solid #c7a596;padding:.7em 0;display:grid;gap:.4em}.approve{display:flex;align-items:center;gap:.5em}.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:.75em}.error{color:#8c3225}.sheet{background:#fff9f3;padding:1.4em;margin-top:1em;border-top:3px solid #bd8b77}.sheet li{margin-bottom:.5em}[hidden]{display:none!important}@media print{html,body,main{background:white;margin:0;width:100%;border:0}main> :not(.sheet){display:none!important}.sheet{margin:0;border-top:3px solid #bd8b77;padding:.25in}.sheet button,.private-note{display:none}li{break-inside:avoid}}
+:root{color:#302421;background:#e9d3c6;font:16px/1.5 system-ui,sans-serif}*{box-sizing:border-box}body{margin:0}main{width:min(94%,820px);margin:28px auto;padding:clamp(18px,5vw,42px);background:#f5e9e1;border:1px solid #bc9586}h1,h2,h3{font-family:Georgia,serif;font-weight:400;line-height:1.14}h1{margin:.3em 0}h2{margin-top:1em}p{margin:.55em 0}label{display:grid;gap:.25em;margin:.6em 0}input,textarea,button{font:inherit}input,textarea{min-width:0;padding:.55em;color:#302421;background:#fff9f3;border:1px solid #aa8073;border-radius:4px}textarea{width:100%}button{padding:.55em .8em;border:1px solid #754535;border-radius:4px;background:#754535;color:white;cursor:pointer}button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid #754535;outline-offset:2px}.muted{color:#65483f;font-size:.9rem}.line{border-top:1px solid #c7a596;padding:.7em 0;display:grid;gap:.4em}.approve{display:flex;align-items:center;gap:.5em}.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(125px,1fr));gap:.75em}.error{color:#8c3225}.sheet{background:#fff9f3;padding:1.4em;margin-top:1em;border-top:3px solid #bd8b77}.sheet li{margin-bottom:.5em}[hidden]{display:none!important}@media print{html,body,main{background:white;margin:0;width:100%;border:0}main> :not(.sheet){display:none!important}.sheet{margin:0;border-top:3px solid #bd8b77;padding:.25in}.sheet button{display:none}li{break-inside:avoid}}
 
 .sheet{background:#f8f0e9;color:#302421;overflow-wrap:anywhere}
 .contract-brand{display:flex;align-items:center;gap:1.2rem;background:#ecdbd0;padding:1rem;border-bottom:2px solid #bd8b77}
@@ -42,8 +42,6 @@
     <div class="fields">
       <label>Nome da cliente <input id="client" required autocomplete="off"></label>
       <label>Pagamento combinado <input id="payment" required autocomplete="off"></label>
-      <label>Identificação da prestadora (CPF ou CNPJ) <input id="provider-id" autocomplete="off"></label>
-      <label>Referência da anamnese (opcional) <input id="anamnese" autocomplete="off"></label>
     </div>
     <label>Orientações, riscos e alternativas explicados para este plano
       <textarea id="clinical-notes" rows="3" required></textarea>
@@ -101,7 +99,6 @@
       <img class="signature-copy" id="signature-copy" alt="Assinatura desenhada da cliente">
       <p id="photo-result"></p>
     </section>
-    <p class="muted private-note" id="clinical-reference"></p>
     <p id="return-instructions" hidden>Após assinar, salve o PDF, guarde uma cópia e envie outra à Raquel pelo WhatsApp.</p>
     <div class="signature-actions interactive-only">
       <button type="button" id="print">Imprimir ou salvar PDF</button>
@@ -345,13 +342,10 @@ byId('approval').addEventListener('submit', event => {
     error.textContent = 'Registre as orientações, os riscos e as alternativas explicados para este plano.';
     return;
   }
-  const providerId = byId('provider-id').value.trim();
-  byId('provider').textContent = 'Prestadora: RC Estética Regenerativa · Raquel Mendes Rodrigues Costa Casarini · CRBM-26358' + (providerId ? ' · CPF/CNPJ: ' + providerId : '');
+  byId('provider').textContent = 'Raquel Mendes Rodrigues Costa Casarini · CRBM-26358';
   byId('clinical-summary').textContent = 'Orientações do plano: ' + clinicalNotes;
   byId('customer').textContent = 'Cliente: ' + client + ' · Pedido ' + order.reference;
   byId('terms').textContent = 'Pagamento combinado: ' + payment;
-  const reference = byId('anamnese').value.trim();
-  byId('clinical-reference').textContent = reference ? 'Referência interna da anamnese: ' + reference : '';
   byId('plan').replaceChildren(...approved.map(item => {
     const li = document.createElement('li');
     li.textContent = item.name + ' · ' + item.quantity + (item.quantity === 1 ? ' sessão' : ' sessões') + ' · ' + money(item.cents);
@@ -460,7 +454,7 @@ function clearContract() {
   byId('import').reset();
   byId('approval').reset();
   resetSignature();
-  for (const id of ['lines', 'reference', 'provider', 'customer', 'terms', 'clinical-summary', 'plan', 'total', 'clinical-reference', 'error', 'approval-error']) {
+  for (const id of ['lines', 'reference', 'provider', 'customer', 'terms', 'clinical-summary', 'plan', 'total', 'error', 'approval-error']) {
     byId(id).textContent = '';
   }
   byId('approval').hidden = true;
@@ -548,7 +542,7 @@ byId('make-client-link').addEventListener('click', async () => {
 if (clientMode) {
   byId('import').hidden = true;
   byId('unlock').hidden = false;
-  for (const id of ['make-client-link','export-signing','print-for-signing','finish-contract','share-contract','clinical-reference']) {
+  for (const id of ['make-client-link','export-signing','print-for-signing','finish-contract','share-contract']) {
     byId(id).hidden = true;
   }
   byId('return-instructions').hidden = false;
@@ -576,7 +570,6 @@ if (clientMode) {
 
 byId('export-signing').addEventListener('click', () => {
   const copy = byId('document').cloneNode(true);
-  copy.querySelector('.private-note').remove();
   for (const id of ['make-client-link', 'share-contract', 'link-status']) copy.querySelector('#' + id).remove();
   copy.querySelector('#return-instructions').hidden = false;
   copy.querySelector('#export-signing').remove();
